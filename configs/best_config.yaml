@@ -1,0 +1,49 @@
+# configs/best_config.yaml
+# Best hyperparameters confirmed from sweep + medium training
+
+model:
+  architecture  : MobileStudentCNN
+  parameters    : 230058
+  size_mb       : 0.9
+
+teacher:
+  architecture  : facebook/wav2vec2-base
+  parameters    : 94400000
+  frozen        : true
+
+knowledge_distillation:
+  learning_rate : 0.0005
+  temperature   : 6.0
+  alpha         : 0.7          # 70% soft KD loss + 30% hard CE loss
+
+training:
+  batch_size    : 16
+  max_epochs    : 25
+  patience      : 6
+  scheduler     : ReduceLROnPlateau
+  factor        : 0.5
+  sched_patience: 3
+  best_epoch    : 13
+  stopped_epoch : 19
+
+results:
+  dev_eer       : 0.30         # seen attacks A01-A06
+  eval_eer      : 5.71         # unseen attacks A07-A19 — TRUE BENCHMARK
+  accuracy      : 90.84
+  far           : 1.09
+  frr           : 10.09
+
+dataset:
+  name          : ASVspoof2019_LA
+  train_samples : 25380
+  dev_samples   : 24986
+  eval_samples  : 71237
+  sample_rate   : 16000
+  max_seconds   : 4
+
+audio_features:
+  n_mels        : 64
+  n_fft         : 1024
+  hop_length    : 512
+  f_min         : 0.0
+  f_max         : 8000.0

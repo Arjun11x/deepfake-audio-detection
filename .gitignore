@@ -1,0 +1,19 @@
+# Dataset — never push this (71k+ audio files)
+data/
+
+# Model weights — too large for GitHub
+outputs/
+*.pth
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
