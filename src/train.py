@@ -4,10 +4,15 @@ train.py — Full training loop for deepfake audio detection.
 Usage:
     python src/train.py                        # uses ENV from config.py
     python src/train.py --env colab            # override ENV at runtime
+    python src/train.py --skip_if_trained      # skip if student_best.pth already exists
 
 For Colab:
     Set ENV = "colab" in config.py, or pass --env colab
     Paths are picked up automatically from config.
+
+The --skip_if_trained flag checks for an existing student_best.pth before
+starting training. This prevents accidentally overwriting a trained model
+and makes the script safe to re-run in any environment.
 """
 
 import os
@@ -20,7 +25,6 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
-# Allow running from project root or src/
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
@@ -29,25 +33,19 @@ from dataset import AudioDeepfakeDataset
 from utils import load_asvspoof2019, compute_eer, kd_loss
 
 
-# ==========================================
-# Argument Parser — override ENV without editing config
-# ==========================================
 def parse_args():
     parser = argparse.ArgumentParser(description="Train deepfake audio detection student model")
     parser.add_argument("--env", type=str, choices=["local", "colab"], default=None,
                         help="Override ENV from config.py (local | colab)")
+    parser.add_argument("--skip_if_trained", action="store_true",
+                        help="Skip training if student_best.pth already exists")
     return parser.parse_args()
 
 
-# ==========================================
-# Main Training Function
-# ==========================================
-def train(env_override=None):
+def train(env_override=None, skip_if_trained=False):
 
-    # Apply ENV override if passed
     if env_override:
         config.ENV = env_override
-        # Re-derive paths after ENV change
         import importlib
         importlib.reload(config)
 
@@ -58,7 +56,25 @@ def train(env_override=None):
     print(f"\nDevice: {device}")
 
     # ==========================================
-    # Load Dataset (full, unbalanced for dev)
+    # Skip if already trained
+    # ==========================================
+    if skip_if_trained and os.path.exists(config.BEST_MODEL_PATH):
+        size_mb    = os.path.getsize(config.BEST_MODEL_PATH) / (1024 * 1024)
+        num_params = sum(p.numel() for p in MobileStudentCNN().parameters())
+        print(f"\n{'='*55}")
+        print(f"  SKIPPING TRAINING — model already exists")
+        print(f"{'='*55}")
+        print(f"  Path       : {config.BEST_MODEL_PATH}")
+        print(f"  Size       : {size_mb:.1f} MB")
+        print(f"  Parameters : {num_params:,}")
+        print(f"{'='*55}")
+        print(f"\n  To retrain from scratch:")
+        print(f"  1. Delete {config.BEST_MODEL_PATH}")
+        print(f"  2. Re-run without --skip_if_trained flag")
+        return
+
+    # ==========================================
+    # Load Dataset
     # ==========================================
     print("\nLoading full training dataset...")
     train_files, train_labels = load_asvspoof2019(
@@ -67,7 +83,7 @@ def train(env_override=None):
     )
     val_files, val_labels = load_asvspoof2019(
         config.DATASET_ROOT, config.AUDIO_DIRS, config.PROTOCOL_FILES,
-        subset="dev", max_samples=None, balanced=False   # natural distribution for true EER
+        subset="dev", max_samples=None, balanced=False
     )
 
     train_dataset = AudioDeepfakeDataset(train_files, train_labels, is_training=True)
@@ -119,7 +135,7 @@ def train(env_override=None):
     lr_curve                   = []
 
     if os.path.exists(config.CHECKPOINT_PATH):
-        print(f"\n🔄 Checkpoint found — resuming...")
+        print(f"\n Checkpoint found — resuming...")
         ckpt = torch.load(config.CHECKPOINT_PATH, map_location=device)
         student.load_state_dict(ckpt["model_state"])
         optimizer.load_state_dict(ckpt["optimizer_state"])
@@ -135,7 +151,7 @@ def train(env_override=None):
         lr_curve                   = ckpt.get("lr_curve", [])
         print(f"  Resumed from epoch {start_epoch - 1} | Best EER: {best_eer:.2f}%")
     else:
-        print(f"\n🆕 No checkpoint found — starting fresh")
+        print(f"\n No checkpoint found — starting fresh")
 
     # ==========================================
     # Training Loop
@@ -226,7 +242,6 @@ def train(env_override=None):
 
         scheduler.step(epoch_eer)
 
-        # Best model
         if epoch_eer < best_eer:
             best_eer                   = epoch_eer
             ideal_epoch                = epoch
@@ -237,7 +252,6 @@ def train(env_override=None):
             epochs_without_improvement += 1
             print(f"  ⏳ No improvement ({epochs_without_improvement}/{config.FULL_PATIENCE})")
 
-        # Checkpoint every epoch
         torch.save({
             "epoch"                      : epoch,
             "model_state"                : student.state_dict(),
@@ -253,12 +267,10 @@ def train(env_override=None):
             "lr_curve"                   : lr_curve,
         }, config.CHECKPOINT_PATH)
 
-        # Early stopping
         if epochs_without_improvement >= config.FULL_PATIENCE:
             print(f"\n🛑 Early stopping at epoch {epoch} | Best EER: {best_eer:.2f}% at epoch {ideal_epoch}")
             break
 
-    # Final save
     torch.save(student.state_dict(), config.FINAL_MODEL_PATH)
     print(f"\n✅ Final model → {config.FINAL_MODEL_PATH}")
     print(f"✅ Best model  → {config.BEST_MODEL_PATH}")
@@ -290,12 +302,10 @@ def train(env_override=None):
     plt.savefig(curve_path, dpi=150)
     print(f"✅ Curves saved → {curve_path}")
 
-    # Cleanup checkpoint
     if os.path.exists(config.CHECKPOINT_PATH):
         os.remove(config.CHECKPOINT_PATH)
         print("✅ Checkpoint cleaned up")
 
-    # Summary
     print(f"\n{'='*50}")
     print(f"  TRAINING COMPLETE")
     print(f"  Best Epoch : {ideal_epoch}")
@@ -305,4 +315,4 @@ def train(env_override=None):
 
 if __name__ == "__main__":
     args = parse_args()
-    train(env_override=args.env)
+    train(env_override=args.env, skip_if_trained=args.skip_if_trained)
