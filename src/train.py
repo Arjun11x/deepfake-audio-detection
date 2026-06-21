@@ -397,5 +397,5 @@ def train(env_override=None, skip_if_trained=False):
 
 if __name__ == "__main__":
     args = parse_args()
-    #train_teacher(epochs=10, lr=1e-4)
+    train_teacher(epochs=10, lr=1e-4)
     train(env_override=args.env, skip_if_trained=args.skip_if_trained)
