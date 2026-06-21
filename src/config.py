@@ -25,7 +25,7 @@ if ENV == "colab":
 else:
     # --- Local machine paths ---
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    DATASET_ROOT = os.environ.get("ASVSPOOF_ROOT") or os.path.join(PROJECT_ROOT, "data", "LA")
+    DATASET_ROOT = os.environ.get("ASVSPOOF_ROOT") or os.path.join(PROJECT_ROOT, "data", "LA", "LA")
     SAVE_DIR     = os.path.join(PROJECT_ROOT, "outputs")
     SRC_DIR      = os.path.join(PROJECT_ROOT, "src")
 
@@ -47,6 +47,7 @@ BEST_MODEL_PATH       = os.path.join(SAVE_DIR, "student_best.pth")
 FINAL_MODEL_PATH      = os.path.join(SAVE_DIR, "student_final.pth")
 MEDIUM_MODEL_PATH     = os.path.join(SAVE_DIR, "student_medium_best.pth")
 CHECKPOINT_PATH       = os.path.join(SAVE_DIR, "training_checkpoint.pth")
+TEACHER_MODEL_PATH    = os.path.join(SAVE_DIR, "teacher_best.pth")
 
 # =============================================================
 # AUDIO CONFIGURATION
@@ -66,7 +67,7 @@ F_MAX          = 8000.0
 # BEST HYPERPARAMETERS (confirmed from sweep)
 # =============================================================
 LR             = 0.0005
-TEMPERATURE    = 6.0
+TEMPERATURE    = 4.0
 ALPHA          = 0.7     # 70% soft KD loss + 30% hard CE loss
 
 # =============================================================
@@ -76,7 +77,7 @@ BATCH_SIZE     = 16
 NUM_WORKERS    = 2
 
 # Full training
-FULL_MAX_EPOCHS     = 25
+FULL_MAX_EPOCHS     = 30
 FULL_PATIENCE       = 6
 SCHEDULER_FACTOR    = 0.5
 SCHEDULER_PATIENCE  = 3

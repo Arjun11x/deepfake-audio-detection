@@ -32,6 +32,81 @@ from models import MobileStudentCNN, Wav2VecTeacher
 from dataset import AudioDeepfakeDataset
 from utils import load_asvspoof2019, compute_eer, kd_loss
 
+def train_teacher(epochs=10, lr=1e-4):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"\nDevice: {device}")
+
+    config.make_dirs()
+
+    train_files, train_labels = load_asvspoof2019(
+        config.DATASET_ROOT, config.AUDIO_DIRS, config.PROTOCOL_FILES,
+        subset="train", max_samples=5000, balanced=True
+    )
+    val_files, val_labels = load_asvspoof2019(
+        config.DATASET_ROOT, config.AUDIO_DIRS, config.PROTOCOL_FILES,
+        subset="dev", max_samples=None, balanced=False
+    )
+
+    train_dataset = AudioDeepfakeDataset(train_files, train_labels, is_training=True)
+    val_dataset   = AudioDeepfakeDataset(val_files,   val_labels,   is_training=False)
+
+    train_loader = DataLoader(train_dataset, batch_size=16,
+                              shuffle=True,  num_workers=2, pin_memory=True)
+    val_loader   = DataLoader(val_dataset,   batch_size=16,
+                              shuffle=False, num_workers=2, pin_memory=True)
+
+    teacher      = Wav2VecTeacher().to(device)
+    optimizer    = optim.Adam(teacher.classifier.parameters(), lr=lr)
+    loss_fn      = nn.CrossEntropyLoss()
+    best_acc     = 0.0
+
+    print(f"\nTraining Teacher for {epochs} epochs...\n")
+
+    for epoch in range(1, epochs + 1):
+
+        # --- Train ---
+        teacher.train()
+        teacher.wav2vec.eval()
+        train_loss = 0.0
+
+        for raw_audio, _, true_labels in train_loader:
+            raw_audio   = raw_audio.to(device)
+            true_labels = true_labels.to(device)
+
+            optimizer.zero_grad()
+            logits = teacher(raw_audio)
+            loss   = loss_fn(logits, true_labels)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                teacher.classifier.parameters(), max_norm=1.0
+            )
+            optimizer.step()
+            train_loss += loss.item()
+
+        # --- Validate ---
+        teacher.eval()
+        correct, total = 0, 0
+
+        with torch.no_grad():
+            for raw_audio, _, true_labels in val_loader:
+                raw_audio   = raw_audio.to(device)
+                true_labels = true_labels.to(device)
+                logits      = teacher(raw_audio)
+                predicted   = torch.argmax(logits, dim=1)
+                correct    += (predicted == true_labels).sum().item()
+                total      += true_labels.size(0)
+
+        acc      = 100.0 * correct / total
+        avg_loss = train_loss / len(train_loader)
+        print(f"  [{epoch:02d}/{epochs}]  Loss: {avg_loss:.4f}  Val Acc: {acc:.1f}%")
+
+        if acc > best_acc:
+            best_acc = acc
+            torch.save(teacher.state_dict(), config.TEACHER_MODEL_PATH)
+            print(f"  💾 Best teacher saved — Acc: {acc:.1f}%")
+
+    print(f"\n✅ Teacher training done | Best Acc: {best_acc:.1f}%")
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train deepfake audio detection student model")
@@ -103,8 +178,15 @@ def train(env_override=None, skip_if_trained=False):
     # Models
     # ==========================================
     print("\nLoading Teacher (frozen)...")
+   
+    #teacher = Wav2VecTeacher().to(device)
+    #teacher.eval()
     teacher = Wav2VecTeacher().to(device)
+    assert os.path.exists(config.TEACHER_MODEL_PATH), \
+        "Teacher not trained! Run train_teacher() first."
+    teacher.load_state_dict(torch.load(config.TEACHER_MODEL_PATH, map_location=device))
     teacher.eval()
+    print("✅ Trained teacher loaded!")
 
     student = MobileStudentCNN().to(device)
 
@@ -315,4 +397,5 @@ def train(env_override=None, skip_if_trained=False):
 
 if __name__ == "__main__":
     args = parse_args()
+    #train_teacher(epochs=10, lr=1e-4)
     train(env_override=args.env, skip_if_trained=args.skip_if_trained)

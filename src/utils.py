@@ -180,7 +180,6 @@ def preprocess_chunk(waveform_chunk, config, device):
     waveform_chunk = waveform_chunk.to(device)
     mel_spec       = mel_transform(waveform_chunk)
     mel_spec       = torchaudio.transforms.AmplitudeToDB()(mel_spec)
-    mel_spec       = (mel_spec - mel_spec.mean()) / (mel_spec.std() + 1e-8)
     mel_spec       = mel_spec.unsqueeze(0)   # add batch dim → [1, 1, 64, T]
 
     return mel_spec

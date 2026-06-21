@@ -39,9 +39,24 @@ class AudioDeepfakeDataset(Dataset):
 
     def __getitem__(self, idx):
         filepath = self.file_paths[idx]
+        
         try:
-            waveform, sr = torchaudio.load(filepath, backend="soundfile")
+            # 1. Read directly with soundfile (bypasses torchcodec completely)
+            import soundfile as sf
+            audio_array, sr = sf.read(filepath, dtype='float32')
+            
+            # 2. Convert to PyTorch tensor
+            waveform = torch.tensor(audio_array)
+            
+            # 3. Fix the shape (soundfile returns [time] or [time, channels])
+            # torchaudio expects [channels, time]
+            if waveform.ndim == 1:
+                waveform = waveform.unsqueeze(0) # Mono
+            else:
+                waveform = waveform.t()          # Stereo
+
         except Exception as e:
+            # Keep the error message brief so it doesn't flood the terminal
             print(f"[WARN] Failed to load {filepath}: {e}")
             return (
                 torch.zeros(self.max_length),

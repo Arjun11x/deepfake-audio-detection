@@ -2,8 +2,7 @@
 data/
 
 # Model weights — too large for GitHub
-outputs/
-*.pth
+outputs/*.pth
 
 # Python
 __pycache__/
@@ -17,3 +16,6 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Virtual environment
+venv/

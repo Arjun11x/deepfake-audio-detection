@@ -86,7 +86,14 @@ def run_inference(filepath, student=None, device=None, model_path=None, save_plo
     # ==========================================
     # Load + Preprocess Audio
     # ==========================================
-    waveform, sr = torchaudio.load(filepath)
+    #waveform, sr = torchaudio.load(filepath)
+    import soundfile as sf
+    audio_array, sr = sf.read(filepath, dtype='float32')
+    waveform = torch.tensor(audio_array)
+    if waveform.ndim == 1:
+        waveform = waveform.unsqueeze(0)
+    else:
+        waveform = waveform.t()
     size_kb      = os.path.getsize(filepath) / 1024
     duration     = waveform.shape[1] / sr
 
